@@ -1,37 +1,220 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rasp</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, #006a2c, #7a0000);
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      color: #fff;
-    }
-
-    h1 {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 20px 40px;
-      border-radius: 12px;
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
-      font-size: 1.8rem;
-      text-align: center;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor do Raspberry Pi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif; /* Fonte padrão sugerida */
+        }
+        .card {
+            @apply bg-white shadow-lg rounded-lg p-6 transition-all duration-300 hover:shadow-xl;
+        }
+        .table-header {
+            @apply bg-gray-200 text-gray-700 font-semibold;
+        }
+        .table-cell {
+            @apply px-4 py-2 border-b border-gray-200 text-sm text-gray-600;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Estilo para a mensagem de erro/status */
+        #status-message {
+            @apply mt-4 p-4 text-sm rounded-md;
+        }
+        .status-error {
+            @apply bg-red-100 text-red-700;
+        }
+        .status-loading {
+            @apply bg-blue-100 text-blue-700;
+        }
+        .status-success {
+            @apply bg-green-100 text-green-700;
+        }
+    </style>
 </head>
-<body>
-  <h1>Bem-vindo ao Raspberry Pi 3B+!</h1>
+<body class="bg-gray-100 min-h-screen p-4 sm:p-8">
+    <div class="container mx-auto max-w-5xl">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-800">Painel de Monitoramento do Raspberry Pi</h1>
+        </header>
+
+        <div id="status-message" role="alert" aria-live="assertive"></div>
+
+        <section id="system-info" class="mb-8">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Informações do Sistema</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="card">
+                    <h3 class="text-lg font-semibold text-gray-600 mb-2">CPU</h3>
+                    <p id="cpu-usage" class="text-3xl font-bold text-blue-600">--%</p>
+                    <p class="text-sm text-gray-500">Uso Atual</p>
+                </div>
+                <div class="card">
+                    <h3 class="text-lg font-semibold text-gray-600 mb-2">Memória RAM</h3>
+                    <p id="memory-usage" class="text-3xl font-bold text-green-600">--/-- MB</p>
+                    <p class="text-sm text-gray-500">Usado / Total</p>
+                </div>
+                <div class="card">
+                    <h3 class="text-lg font-semibold text-gray-600 mb-2">Disco</h3>
+                    <p id="disk-usage" class="text-3xl font-bold text-yellow-600">--%</p>
+                    <p id="disk-details" class="text-sm text-gray-500">--/-- GB Usado</p>
+                </div>
+                <div class="card">
+                    <h3 class="text-lg font-semibold text-gray-600 mb-2">Temperatura CPU</h3>
+                    <p id="cpu-temp" class="text-3xl font-bold text-red-600">--°C</p>
+                    <p class="text-sm text-gray-500">Atual</p>
+                </div>
+                <div class="card sm:col-span-2 lg:col-span-4">
+                    <h3 class="text-lg font-semibold text-gray-600 mb-2">Uptime</h3>
+                    <p id="uptime" class="text-xl font-bold text-purple-600">--</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="processes">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Processos em Execução</h2>
+            <div class="bg-white shadow-lg rounded-lg overflow-x-auto">
+                <table class="min-w-full">
+                    <thead class="table-header">
+                        <tr>
+                            <th class="table-cell text-left">PID</th>
+                            <th class="table-cell text-left">Usuário</th>
+                            <th class="table-cell text-left">CPU%</th>
+                            <th class="table-cell text-left">MEM%</th>
+                            <th class="table-cell text-left">Comando</th>
+                        </tr>
+                    </thead>
+                    <tbody id="process-list">
+                        <tr>
+                            <td colspan="5" class="table-cell text-center">
+                                <div class="flex justify-center items-center py-4">
+                                    <div class="loading-spinner"></div>
+                                    <span class="ml-2 text-gray-500">Carregando processos...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="mt-12 text-center text-sm text-gray-500">
+            <p>Página de monitoramento local do Raspberry Pi. Atualizado em: <span id="last-updated">--</span></p>
+        </footer>
+    </div>
+
+    <script>
+        // Elementos da UI para atualizar
+        const cpuUsageEl = document.getElementById('cpu-usage');
+        const memoryUsageEl = document.getElementById('memory-usage');
+        const diskUsageEl = document.getElementById('disk-usage');
+        const diskDetailsEl = document.getElementById('disk-details');
+        const cpuTempEl = document.getElementById('cpu-temp');
+        const uptimeEl = document.getElementById('uptime');
+        const processListEl = document.getElementById('process-list');
+        const lastUpdatedEl = document.getElementById('last-updated');
+        const statusMessageEl = document.getElementById('status-message');
+
+        // Função para mostrar mensagens de status/erro
+        function showStatusMessage(message, type = 'loading') {
+            statusMessageEl.textContent = message;
+            statusMessageEl.className = 'mt-4 p-4 text-sm rounded-md'; // Reset classes
+            if (type === 'error') {
+                statusMessageEl.classList.add('status-error');
+            } else if (type === 'success') {
+                statusMessageEl.classList.add('status-success');
+            } else { // loading or info
+                statusMessageEl.classList.add('status-loading');
+            }
+            statusMessageEl.style.display = 'block';
+        }
+
+        function hideStatusMessage() {
+            statusMessageEl.style.display = 'none';
+            statusMessageEl.textContent = '';
+        }
+
+        // Função para buscar e atualizar os dados
+        async function fetchData() {
+            showStatusMessage('Carregando dados do sistema...', 'loading');
+            try {
+                // Buscar informações do sistema
+                const systemInfoResponse = await fetch('/api/system-info');
+                if (!systemInfoResponse.ok) {
+                    throw new Error(`Erro ao buscar informações do sistema: ${systemInfoResponse.status} ${systemInfoResponse.statusText}`);
+                }
+                const systemInfo = await systemInfoResponse.json();
+
+                // Atualizar informações do sistema na UI
+                cpuUsageEl.textContent = `${systemInfo.cpu_usage || '--'}%`;
+                memoryUsageEl.textContent = `${systemInfo.memory_used || '--'} / ${systemInfo.memory_total || '--'} MB`;
+                diskUsageEl.textContent = `${systemInfo.disk_percentage || '--'}%`;
+                diskDetailsEl.textContent = `${systemInfo.disk_used || '--'} / ${systemInfo.disk_total || '--'} GB Usado`;
+                cpuTempEl.textContent = `${systemInfo.cpu_temp || '--'}°C`;
+                uptimeEl.textContent = systemInfo.uptime || '--';
+
+                // Buscar lista de processos
+                const processesResponse = await fetch('/api/processes');
+                if (!processesResponse.ok) {
+                    throw new Error(`Erro ao buscar lista de processos: ${processesResponse.status} ${processesResponse.statusText}`);
+                }
+                const processes = await processesResponse.json();
+
+                // Limpar lista de processos antiga e preencher com novos dados
+                processListEl.innerHTML = ''; // Limpa o spinner/mensagens antigas
+                if (processes && processes.length > 0) {
+                    processes.forEach(proc => {
+                        const row = processListEl.insertRow();
+                        row.insertCell().textContent = proc.pid || '-';
+                        row.insertCell().textContent = proc.user || '-';
+                        row.insertCell().textContent = proc.cpu_percent || '-';
+                        row.insertCell().textContent = proc.mem_percent || '-';
+                        
+                        const commandCell = row.insertCell();
+                        commandCell.textContent = proc.command || '-';
+                        commandCell.classList.add('truncate', 'max-w-xs'); // Para evitar que comandos longos quebrem o layout
+                        commandCell.title = proc.command || ''; // Tooltip para comando completo
+                    });
+                } else {
+                    processListEl.innerHTML = '<tr><td colspan="5" class="table-cell text-center text-gray-500 py-4">Nenhum processo encontrado ou dados indisponíveis.</td></tr>';
+                }
+                
+                lastUpdatedEl.textContent = new Date().toLocaleTimeString('pt-BR');
+                showStatusMessage('Dados atualizados com sucesso!', 'success');
+                setTimeout(hideStatusMessage, 3000); // Esconde a mensagem de sucesso após 3 segundos
+
+            } catch (error) {
+                console.error('Erro ao buscar dados:', error);
+                showStatusMessage(`Erro ao carregar dados: ${error.message}. Verifique se o servidor backend está rodando e acessível.`, 'error');
+                // Preencher com placeholders em caso de erro para não ficar vazio
+                cpuUsageEl.textContent = '--%';
+                memoryUsageEl.textContent = '--/-- MB';
+                diskUsageEl.textContent = '--%';
+                diskDetailsEl.textContent = '--/-- GB Usado';
+                cpuTempEl.textContent = '--°C';
+                uptimeEl.textContent = '--';
+                processListEl.innerHTML = `<tr><td colspan="5" class="table-cell text-center text-red-500 py-4">Falha ao carregar processos.</td></tr>`;
+            }
+        }
+
+        // Chamar a função para buscar dados quando a página carregar
+        // e depois a cada X segundos (ex: 5 segundos)
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchData(); // Carga inicial
+            setInterval(fetchData, 10000); // Atualiza a cada 10 segundos
+        });
+    </script>
 </body>
 </html>
